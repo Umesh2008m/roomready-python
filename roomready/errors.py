@@ -16,6 +16,12 @@ class DomainError(Exception):
         self.extra = extra
 
 
+class Malformed(DomainError):
+    """A body that passes its Field constraints but fails a rule the clock or the row decides (`at` in the
+    future, `at` before check-in) — the validation status, naming the field, like any other malformed body."""
+    status, type, title = 422, "/errors/validation", "The request body is not valid"
+
+
 class NoSuchProperty(DomainError):
     status, type, title = 404, "/errors/no-such-property", "No such property"
 
@@ -24,5 +30,10 @@ class NoSuchRoom(DomainError):
     status, type, title = 404, "/errors/no-such-room", "No such room in this property"
 
 
+class RoomNotOccupied(DomainError):
+    status, type, title = 400, "/errors/room-not-occupied", "The room has no guest to check out"
+
+
 # and (status, type, title) of the errors no domain class raises
+VALIDATION = (422, "/errors/validation", "The request body is not valid")
 FILTER = (400, "/errors/validation", "Invalid filter value")

@@ -4,8 +4,8 @@ from sqlalchemy import func
 from sqlalchemy import select
 
 from roomready.app import create_app
-from roomready.models import Housekeeper, Room
-from tests.conftest import P, make_settings, room
+from roomready.models import Housekeeper, Room, Stay
+from tests.conftest import P, checkout, make_settings, room
 
 
 def test_seeding_is_idempotent_across_two_starts(tmp_path, clock):
@@ -17,6 +17,7 @@ def test_seeding_is_idempotent_across_two_starts(tmp_path, clock):
         with app.state.sessionmaker() as s:
             assert s.scalar(select(func.count()).select_from(Room)) == 60
             assert s.scalar(select(func.count()).select_from(Housekeeper)) == 9
+            assert s.scalar(select(func.count()).select_from(Stay)) == 60
 
 def test_the_board_has_sixty_rooms_on_four_floors_all_occupied(client):
     r = client.get(f"{P}/rooms")
@@ -39,8 +40,13 @@ def test_nine_housekeepers_are_listed_with_the_room_each_is_on(client):
 
 
 def test_floor_and_state_filters_show_only_those_rooms_and_their_counts(client):
+    checkout(client, "214")
+    checkout(client, "215")
+    checkout(client, "301")
+    body = client.get(f"{P}/rooms?floor=2&state=dirty").json()
+    assert [x["no"] for x in body["rooms"]] == ["214", "215"] and body["dirty"] == 2 and body["ready"] == 0
     body = client.get(f"{P}/rooms?floor=2").json()
-    assert len(body["rooms"]) == 15
+    assert len(body["rooms"]) == 15 and body["dirty"] == 2
     body = client.get(f"{P}/rooms?type=Suite").json()
     assert len(body["rooms"]) == 8 and all(x["type"] == "Suite" for x in body["rooms"])
     assert client.get(f"{P}/rooms?state=ready").json()["rooms"] == []
@@ -60,7 +66,7 @@ def test_one_room_and_the_404s(client):
     r = client.get(f"{P}/rooms/214")
     assert r.status_code == 200
     body = r.json()
-    body.pop("since_minutes")
+    assert body.pop("since_minutes") == 1440, "the guest checked in a day ago"
     assert body == {"no": "214", "floor": 2, "type": "Deluxe", "state": "occupied", "assigned_to": None}
     r = client.get(f"{P}/rooms/999")
     assert r.status_code == 404 and r.json()["type"] == "/errors/no-such-room"
@@ -71,4 +77,7 @@ def test_one_room_and_the_404s(client):
 
 def test_state_is_derived_from_rows_and_there_is_no_state_column(client):
     assert "state" not in Room.__table__.columns
-    assert room(client, "214")["state"] == "occupied"      
+    assert room(client, "214")["state"] == "occupied"
+    checkout(client, "214")
+    assert room(client, "214")["state"] == "dirty"
+    assert room(client, "214")["state"] == "dirty", "a second read derives the same state from the same rows"

@@ -6,6 +6,7 @@ from fastapi.responses import JSONResponse
 
 from .errors import (
     FILTER,
+    VALIDATION,
     DomainError,
 )
 
@@ -24,8 +25,11 @@ def install_handlers(app: FastAPI) -> None:
 
     @app.exception_handler(RequestValidationError)
     async def _validation(_request: Request, exc: RequestValidationError):
-        #  and A filter outside its enum is 400.
+        # A filter outside its enum is 400; a body that fails its constraints is 422. Same type, same shape.
         errors = [{"field": ".".join(str(p) for p in e["loc"] if p not in ("body", "query", "path")), "message": e["msg"]}
                   for e in exc.errors()]
+        if any(e["loc"] and e["loc"][0] == "body" for e in exc.errors()):
+            status, type_, title = VALIDATION
+            return problem(status, type_, title, f"{len(errors)} field(s) failed validation", errors=errors)
         status, type_, title = FILTER
         return problem(status, type_, title, f"{len(errors)} filter(s) invalid", errors=errors)
