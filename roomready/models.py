@@ -1,5 +1,5 @@
-"""Rooms, stays and assignments. A room's state is derived from these rows,
-and there is deliberately no `state` column on rooms. Durations are stamped once and never
+"""Rooms, stays, assignments, inspections and readiness. A room's state is derived from these rows,
+and there is deliberately no `state` column on rooms. Durations and margins are stamped once and never
 recomputed."""
 from datetime import datetime
 
@@ -64,7 +64,7 @@ class Stay(Base):
 
 
 class Assignment(Base):
-    """One row per clean; assigned / cleaning / toinspect from the stamps."""
+    """One row per clean. Open while closed_at is null; assigned / cleaning / toinspect from the stamps."""
     __tablename__ = "assignments"
 
     id: Mapped[int] = mapped_column(Integer, primary_key=True)
@@ -76,3 +76,29 @@ class Assignment(Base):
     started_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), nullable=True)
     finished_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), nullable=True)
     clean_minutes: Mapped[int | None] = mapped_column(Integer, nullable=True)    # and stamped at finish, never recomputed
+    closed_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), nullable=True)   # and an inspection closes it
+
+
+class Inspection(Base):
+    __tablename__ = "inspections"
+
+    id: Mapped[int] = mapped_column(Integer, primary_key=True)
+    property_id: Mapped[int] = mapped_column(ForeignKey("properties.id"))
+    room_id: Mapped[int] = mapped_column(ForeignKey("rooms.id"))
+    assignment_id: Mapped[int] = mapped_column(ForeignKey("assignments.id"))
+    inspector_id: Mapped[int] = mapped_column(ForeignKey("housekeepers.id"))
+    result: Mapped[str] = mapped_column(String(4))                     # pass | fail
+    inspected_at: Mapped[datetime] = mapped_column(DateTime(timezone=True))
+
+
+class Readiness(Base):
+    """One row per stay whose room reached ready — when, against which arrival, and the margin, stamped once."""
+    __tablename__ = "room_readiness"
+
+    id: Mapped[int] = mapped_column(Integer, primary_key=True)
+    property_id: Mapped[int] = mapped_column(ForeignKey("properties.id"))
+    room_id: Mapped[int] = mapped_column(ForeignKey("rooms.id"))
+    stay_id: Mapped[int] = mapped_column(ForeignKey("stays.id"), unique=True)
+    ready_at: Mapped[datetime] = mapped_column(DateTime(timezone=True))
+    arrival_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), nullable=True)
+    margin_minutes: Mapped[int | None] = mapped_column(Integer, nullable=True)
